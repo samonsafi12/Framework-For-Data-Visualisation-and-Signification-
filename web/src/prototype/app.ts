@@ -1,9 +1,9 @@
-import { layoutHtml } from "../ui/layout.ts";
-import { createInitialState } from "../core/state.ts";
-import { DEMO_DATA } from "../io/demoData.ts";
-import { bindUI } from "../ui/bindings.ts";
-import { createPlayer } from "../core/player.ts";
-import { drawLineChart } from "../visuals/chart.ts";
+import { layoutHtml } from "../ui/layout";
+import { createInitialState } from "../core/state";
+import { DEMO_DATA } from "../io/demoData";
+import { bindUI } from "../ui/bindings";
+import { createPlayer } from "../core/player";
+import { drawLineChart, drawSparkline } from "../visuals/chart";
 
 export function initApp(root: HTMLDivElement) {
   root.innerHTML = layoutHtml();
@@ -11,52 +11,66 @@ export function initApp(root: HTMLDivElement) {
   const state = createInitialState(DEMO_DATA.TSLA, "TSLA (demo)");
   const ui = bindUI(root, state);
 
-  const player = createPlayer(state, ui.el.canvas, ui.el.timeline, ui.setStatus);
+  const player = createPlayer(state, ui.el.canvas!, ui.el.timeline!, ui.setStatus);
 
-  // initial render
-  drawLineChart(ui.el.canvas, state.series, state.index);
-  player.update();
+  const render = () => {
+    drawLineChart(ui.el.canvas!, state.series, state.index);
+    if (ui.el.spark) drawSparkline(ui.el.spark, state.series);
+    ui.updateMeta();
+    player.update();
+  };
 
-  // events
-  ui.el.uploadBtn.addEventListener("click", () => ui.el.uploadInput.click());
+  render();
 
-  ui.el.uploadInput.addEventListener("change", async () => {
-    const f = ui.el.uploadInput.files?.[0];
+  ui.el.uploadBtn?.addEventListener("click", () => ui.el.uploadInput?.click());
+
+  ui.el.uploadInput?.addEventListener("change", async () => {
+    const f = ui.el.uploadInput?.files?.[0];
     if (!f) return;
 
     player.stop();
     await ui.loadCsv(f);
-    ui.updateMeta();
-    player.update();
-    drawLineChart(ui.el.canvas, state.series, state.index);
+    state.index = 0;
+
+    render();
 
     ui.el.uploadInput.value = "";
+    ui.el.playBtn && (ui.el.playBtn.textContent = "▶ Play");
+    ui.el.playBtnInline && (ui.el.playBtnInline.textContent = "▶");
   });
 
-  ui.el.playBtn.addEventListener("click", async () => {
+  const togglePlay = async () => {
     if (state.isPlaying) {
       player.stop();
-      ui.el.playBtn.textContent = "▶ Play";
+      ui.el.playBtn && (ui.el.playBtn.textContent = "▶ Play");
+      ui.el.playBtnInline && (ui.el.playBtnInline.textContent = "▶");
     } else {
       await player.start();
-      ui.el.playBtn.textContent = "⏸ Pause";
+      ui.el.playBtn && (ui.el.playBtn.textContent = "⏸ Pause");
+      ui.el.playBtnInline && (ui.el.playBtnInline.textContent = "⏸");
     }
+  };
+
+  ui.el.playBtn?.addEventListener("click", togglePlay);
+  ui.el.playBtnInline?.addEventListener("click", togglePlay);
+
+  ui.el.timeline?.addEventListener("input", () => {
+    state.index = Number(ui.el.timeline?.value) || 0;
+    drawLineChart(ui.el.canvas!, state.series, state.index);
   });
 
-  ui.el.timeline.addEventListener("input", () => {
-    state.index = Number(ui.el.timeline.value) || 0;
-    drawLineChart(ui.el.canvas, state.series, state.index);
+  const prev = root.querySelector<HTMLButtonElement>("#btnPrev");
+  const next = root.querySelector<HTMLButtonElement>("#btnNext");
+
+  prev?.addEventListener("click", () => {
+    state.index = Math.max(0, state.index - 1);
+    ui.el.timeline && (ui.el.timeline.value = String(state.index));
+    drawLineChart(ui.el.canvas!, state.series, state.index);
   });
 
-  ui.el.libraryItems.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const key = btn.getAttribute("data-demo") as any;
-      player.stop();
-      ui.loadDemo(key);
-      ui.updateMeta();
-      player.update();
-      drawLineChart(ui.el.canvas, state.series, state.index);
-      ui.el.playBtn.textContent = "▶ Play";
-    });
+  next?.addEventListener("click", () => {
+    state.index = Math.min(state.series.length - 1, state.index + 1);
+    ui.el.timeline && (ui.el.timeline.value = String(state.index));
+    drawLineChart(ui.el.canvas!, state.series, state.index);
   });
 }
