@@ -19,9 +19,10 @@ body{
               var(--bg);
   color:var(--text);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  overflow: hidden; /* ✅ no page drag/overflow */
 }
 
-#app{min-height:100vh}
+#app{height:100vh; width:100vw;}
 
 .panel{
   background: linear-gradient(180deg, rgba(255,255,255,.04), transparent 55%), var(--panel);
@@ -32,28 +33,51 @@ body{
 
 .app-shell{
   display:grid;
-  grid-template-columns: 320px 1fr 320px;
+  grid-template-columns: minmax(240px, 280px) minmax(520px, 1fr) minmax(240px, 280px);
   gap:18px;
   padding:18px;
   min-height:100vh;
 }
 
+/* ✅ Make panels able to shrink without breaking */
+.sidebar, .main, .rightbar{
+  min-width: 0;
+}
+
+/* ✅ Make chart panel allocate more space to the main chart */
+.chart-wrap{
+  height: 520px;   /* was 420px */
+}
+
+/* ✅ Give sparkline a bit less so main chart dominates */
+.spark-wrap{
+  height: 70px;    /* was 90px */
+}
+
+/* ✅ Keep sidebars from eating space */
+.sidebar, .rightbar{
+  min-width: 0;
+}
+
 .sidebar,.rightbar{
-  padding:16px;
+  padding:14px;              /* was 16px */
   display:flex;
   flex-direction:column;
-  gap:16px;
+  gap:14px;                  /* was 16px */
+  min-width: 0;
+  overflow: auto;
 }
 
 .main{
   display:flex;
   flex-direction:column;
   gap:18px;
+  min-width:0;  /* ✅ prevents horizontal overflow */
+  overflow:hidden;
 }
 
 .brand-title{font-size:22px;font-weight:800}
 .brand-sub{color:var(--muted);font-size:12px;margin-top:2px}
-
 .section-title{font-weight:700;margin-bottom:10px}
 
 .section{
@@ -127,14 +151,21 @@ body{
   gap:18px;
 }
 
-.actions{display:flex;gap:10px;align-items:center}
-
-.meta{display:flex;gap:18px}
+.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.meta{display:flex;gap:18px;flex-wrap:wrap}
 .meta-row{display:flex;gap:8px;align-items:center}
 .meta-k{color:var(--muted);font-size:12px}
 .meta-v{font-weight:700}
 
-.chart-panel{padding:16px}
+.chart-panel{
+  padding:16px;
+  overflow:hidden;
+  flex:1; /* ✅ fill remaining height */
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+
 .chart-head{
   display:flex;
   justify-content:space-between;
@@ -150,6 +181,14 @@ body{
   background: rgba(0,0,0,.18);
   overflow:hidden;
   padding:10px;
+  height: 420px; /* ✅ fixed visible chart area */
+}
+
+.chart-wrap canvas,
+.spark-wrap canvas{
+  width:100%;
+  height:100%;
+  display:block; /* ✅ no extra whitespace */
 }
 
 .timeline-wrap{margin-top:12px}
@@ -162,6 +201,7 @@ body{
   background: rgba(0,0,0,.16);
   overflow:hidden;
   padding:8px;
+  height: 90px;
 }
 
 .iconbtn{
@@ -198,4 +238,54 @@ body{
   padding:10px 12px;
   border-radius:14px;
   background: rgba(0,0,0,.12);
+}
+
+/* ✅ Responsive: stack right sidebar below on smaller screens */
+@media (max-width: 1100px){
+  body{overflow:auto;}
+  .app-shell{
+    height:auto;
+    grid-template-columns: 320px 1fr;
+    grid-template-rows: auto auto;
+    overflow: visible;
+  }
+  .rightbar{
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 820px){
+  .app-shell{
+    grid-template-columns: 1fr;
+  }
+  .sidebar,.rightbar{
+    max-height: none;
+  }
+  .chart-wrap{height:360px;}
+}
+
+/* Medium screens: stack the right sidebar under the chart */
+@media (max-width: 1200px){
+  .app-shell{
+    grid-template-columns: minmax(240px, 300px) 1fr;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "sidebar main"
+      "rightbar main";
+  }
+
+  .sidebar{ grid-area: sidebar; }
+  .main{ grid-area: main; }
+  .rightbar{ grid-area: rightbar; }
+}
+
+/* Small screens: everything stacks vertically */
+@media (max-width: 860px){
+  .app-shell{
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "main"
+      "sidebar"
+      "rightbar";
+  }
 }

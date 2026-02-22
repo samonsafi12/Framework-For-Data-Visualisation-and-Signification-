@@ -17,9 +17,7 @@ export function layoutHtml() {
 
         <div id="libraryList" class="library-list"></div>
 
-        <button class="btn ghost full" type="button">
-          + Add
-        </button>
+        <button class="btn ghost full" type="button">+ Add</button>
       </div>
 
       <div class="section">
@@ -58,9 +56,7 @@ export function layoutHtml() {
         <div class="chart-head">
           <div>
             <div class="chart-title">Closing Price</div>
-            <div class="chart-sub">
-              <span id="seriesLabel">TSLA</span>
-            </div>
+            <div class="chart-sub"><span id="seriesLabel">TSLA</span></div>
           </div>
 
           <div class="mini-actions">
@@ -71,7 +67,7 @@ export function layoutHtml() {
         </div>
 
         <div class="chart-wrap">
-          <canvas id="chart" width="1100" height="420"></canvas>
+          <canvas id="chart"></canvas>
         </div>
 
         <div class="timeline-wrap">
@@ -79,7 +75,7 @@ export function layoutHtml() {
         </div>
 
         <div class="spark-wrap">
-          <canvas id="spark" width="1100" height="90"></canvas>
+          <canvas id="spark"></canvas>
         </div>
       </section>
     </main>
