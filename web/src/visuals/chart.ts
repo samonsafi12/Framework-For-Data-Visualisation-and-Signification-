@@ -1,187 +1,152 @@
 import type { DataPoint } from "../core/state";
 
-function resizeCanvasToDisplaySize(canvas: HTMLCanvasElement) {
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
+function setupCanvas(canvas: HTMLCanvasElement) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("2D canvas not supported");
+
+  // Make canvas crisp on retina displays
+  const dpr = window.devicePixelRatio || 1;
+
+  // Use the element’s rendered size
   const rect = canvas.getBoundingClientRect();
-  const w = Math.max(1, Math.floor(rect.width * dpr));
-  const h = Math.max(1, Math.floor(rect.height * dpr));
-  if (canvas.width !== w || canvas.height !== h) {
-    canvas.width = w;
-    canvas.height = h;
-  }
-  return { dpr, w, h };
+  const cssW = Math.max(1, Math.floor(rect.width));
+  const cssH = Math.max(1, Math.floor(rect.height));
+
+  // If layout gives 0px (rare), fallback
+  const w = cssW || 800;
+  const h = cssH || 300;
+
+  canvas.width = Math.floor(w * dpr);
+  canvas.height = Math.floor(h * dpr);
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels
+  return { ctx, w, h };
 }
 
-export function drawLineChart(canvas: HTMLCanvasElement, series: DataPoint[], index: number) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+function getMinMax(series: DataPoint[]) {
+  if (!series.length) return { min: 0, max: 1 };
+  let min = series[0].close;
+  let max = series[0].close;
+  for (const p of series) {
+    if (p.close < min) min = p.close;
+    if (p.close > max) max = p.close;
+  }
+  // avoid flatline division by zero
+  if (min === max) {
+    min -= 1;
+    max += 1;
+  }
+  return { min, max };
+}
 
-  const { dpr, w, h } = resizeCanvasToDisplaySize(canvas);
+export function drawLineChart(
+  canvas: HTMLCanvasElement,
+  series: DataPoint[],
+  index: number
+) {
+  const { ctx, w, h } = setupCanvas(canvas);
 
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // Clear
   ctx.clearRect(0, 0, w, h);
 
-  // Padding for axes
-  const padL = Math.floor(64 * dpr);
-  const padR = Math.floor(18 * dpr);
-  const padT = Math.floor(18 * dpr);
-  const padB = Math.floor(38 * dpr);
+  if (!series.length) {
+    ctx.font = "14px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.fillText("No data loaded", 16, 24);
+    return;
+  }
 
-  // Background
-  ctx.fillStyle = "rgba(0,0,0,0.10)";
-  ctx.fillRect(0, 0, w, h);
+  const padL = 44;
+  const padR = 18;
+  const padT = 18;
+  const padB = 34;
 
-  if (!series.length) return;
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
 
-  const closes = series.map(s => s.close);
-  const min = Math.min(...closes);
-  const max = Math.max(...closes);
-  const rng = Math.max(1e-9, max - min);
+  const { min, max } = getMinMax(series);
 
-  const plotW = w - padL - padR;
-  const plotH = h - padT - padB;
+  const xAt = (i: number) =>
+    padL + (series.length === 1 ? innerW / 2 : (i / (series.length - 1)) * innerW);
 
-  const xFor = (i: number) => padL + (i / Math.max(1, series.length - 1)) * plotW;
-  const yFor = (v: number) => padT + (1 - (v - min) / rng) * plotH;
+  const yAt = (v: number) =>
+    padT + (1 - (v - min) / (max - min)) * innerH;
 
-  // Grid
-  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  // Axes baseline
+  ctx.globalAlpha = 1;
   ctx.lineWidth = 1;
 
-  const yTicks = 5;
-  for (let t = 0; t <= yTicks; t++) {
-    const y = padT + (t / yTicks) * plotH;
+  // Light grid lines (3)
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  for (let g = 0; g <= 3; g++) {
+    const y = padT + (g / 3) * innerH;
     ctx.beginPath();
     ctx.moveTo(padL, y);
-    ctx.lineTo(w - padR, y);
+    ctx.lineTo(padL + innerW, y);
     ctx.stroke();
   }
 
-  const xTicks = 6;
-  for (let t = 0; t <= xTicks; t++) {
-    const x = padL + (t / xTicks) * plotW;
-    ctx.beginPath();
-    ctx.moveTo(x, padT);
-    ctx.lineTo(x, padT + plotH);
-    ctx.stroke();
-  }
-
-  // Axes labels
-  ctx.fillStyle = "rgba(232,237,245,0.70)";
-  ctx.font = `${Math.floor(12 * dpr)}px system-ui`;
-
-  for (let t = 0; t <= yTicks; t++) {
-    const v = max - (t / yTicks) * rng;
-    const y = padT + (t / yTicks) * plotH;
-    const label = v.toFixed(2);
-    ctx.fillText(label, Math.floor(10 * dpr), y + Math.floor(4 * dpr));
-  }
-
-  for (let t = 0; t <= xTicks; t++) {
-    const i = Math.round((t / xTicks) * (series.length - 1));
-    const x = xFor(i);
-    const txt = series[i]?.t ?? "";
-    const measure = ctx.measureText(txt).width;
-    ctx.fillText(txt, x - measure / 2, h - Math.floor(14 * dpr));
-  }
-
-  // Line
-  ctx.strokeStyle = "#ff9b26";
-  ctx.lineWidth = Math.max(2, Math.floor(3 * dpr));
+  // Price line
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  for (let i = 0; i < series.length; i++) {
-    const x = xFor(i);
-    const y = yFor(series[i].close);
+  series.forEach((p, i) => {
+    const x = xAt(i);
+    const y = yAt(p.close);
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
-  }
+  });
   ctx.stroke();
 
-  // Current point + crosshair
-  const i = Math.max(0, Math.min(series.length - 1, index | 0));
-  const cx = xFor(i);
-  const cy = yFor(series[i].close);
+  // Highlight current point
+  const clamped = Math.max(0, Math.min(series.length - 1, index));
+  const cur = series[clamped];
+  const cx = xAt(clamped);
+  const cy = yAt(cur.close);
 
-  ctx.strokeStyle = "rgba(255,255,255,0.10)";
-  ctx.lineWidth = 1;
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
   ctx.beginPath();
-  ctx.moveTo(cx, padT);
-  ctx.lineTo(cx, padT + plotH);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(padL, cy);
-  ctx.lineTo(w - padR, cy);
-  ctx.stroke();
-
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.arc(cx, cy, Math.floor(4 * dpr), 0, Math.PI * 2);
+  ctx.arc(cx, cy, 7, 0, Math.PI * 2);
   ctx.fill();
 
-  // Price pill on right
-  const priceTxt = series[i].close.toFixed(2);
-  ctx.font = `${Math.floor(12 * dpr)}px system-ui`;
-  const tw = ctx.measureText(priceTxt).width;
-  const pillPadX = Math.floor(10 * dpr);
-  const pillH = Math.floor(22 * dpr);
-  const pillW = tw + pillPadX * 2;
-
-  const px = w - padR - pillW;
-  const py = Math.max(padT, Math.min(padT + plotH - pillH, cy - pillH / 2));
-
-  ctx.fillStyle = "rgba(255,155,38,0.18)";
-  ctx.strokeStyle = "rgba(255,155,38,0.45)";
-  ctx.lineWidth = 1;
-
-  roundRect(ctx, px, py, pillW, pillH, Math.floor(10 * dpr));
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.beginPath();
+  ctx.arc(cx, cy, 4, 0, Math.PI * 2);
   ctx.fill();
-  ctx.stroke();
 
-  ctx.fillStyle = "#ffcf9a";
-  ctx.fillText(priceTxt, px + pillPadX, py + Math.floor(15 * dpr));
+  // Small label
+  ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  const label = `${cur.t}  •  ${cur.close.toFixed(2)}`;
+  ctx.fillText(label, padL, h - 12);
 }
 
 export function drawSparkline(canvas: HTMLCanvasElement, series: DataPoint[]) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  const { ctx, w, h } = setupCanvas(canvas);
 
-  const { dpr, w, h } = resizeCanvasToDisplaySize(canvas);
-
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, w, h);
-
-  ctx.fillStyle = "rgba(0,0,0,0.12)";
-  ctx.fillRect(0, 0, w, h);
-
   if (!series.length) return;
 
-  const closes = series.map(s => s.close);
-  const min = Math.min(...closes);
-  const max = Math.max(...closes);
-  const rng = Math.max(1e-9, max - min);
+  const pad = 6;
+  const innerW = w - pad * 2;
+  const innerH = h - pad * 2;
 
-  const pad = Math.floor(10 * dpr);
+  const { min, max } = getMinMax(series);
 
-  ctx.strokeStyle = "#ff9b26";
-  ctx.lineWidth = Math.max(2, Math.floor(3 * dpr));
+  const xAt = (i: number) =>
+    pad + (series.length === 1 ? innerW / 2 : (i / (series.length - 1)) * innerW);
+
+  const yAt = (v: number) =>
+    pad + (1 - (v - min) / (max - min)) * innerH;
+
+  ctx.strokeStyle = "rgba(255,255,255,0.65)";
+  ctx.lineWidth = 1.5;
+
   ctx.beginPath();
-
-  for (let i = 0; i < series.length; i++) {
-    const x = pad + (i / Math.max(1, series.length - 1)) * (w - pad * 2);
-    const y = pad + (1 - (series[i].close - min) / rng) * (h - pad * 2);
+  series.forEach((p, i) => {
+    const x = xAt(i);
+    const y = yAt(p.close);
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
-  }
+  });
   ctx.stroke();
-}
-
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  const rr = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
-  ctx.closePath();
 }
